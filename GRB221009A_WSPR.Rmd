@@ -1,0 +1,500 @@
+---
+title: "Momentary HF Radio Propagation Disruption GRB 221009A Detected by the Weak Signal Reporting Network"
+author: "W. Kyle Hamilton"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+bibliography: WSPR.bib
+link-citations: yes
+csl: apa.csl
+nocite: '@*'
+output:
+  html_document:
+    theme: readable
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+On October 9th, 2022 multiple sources reported the detection of GRB 221009A including satellite @2022GCN.32632 @2022GCN.32668 and ground based observers @2022GCN.32745. Among these reports included observations of sudden ionospheric disturbances in the hours after the detection of GRB 221009A @Hayes_2022. These disturbances were caused by the high energy rays emitted from GRB 221009A which in turn had an ionizing effect on ionosphere which resulted in the disruption of HF radio transmissions. Documenting this effect on radio propagation we utilize the Weak Signal Reporting Network (WSPR) which is a global collection of Amateur Radio stations which collect and transmit two minute digital beacon signals on the HF Amateur Radio frequency bands. Data coming from WSPR has been used to previously study the ionosphere. @Frissell2019 @Frissell2022
+
+
+# Setup Workspace
+
+```{r Load Packages, message=FALSE, warning=FALSE}
+# Load packages
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(DT)
+
+# Colorblind colors
+# Steenwyk & Rokas (2021). https://doi.org/10.1128/MRA.00871-21
+vibrant_seven <- c("#0077BB", "#EE7733", "#33BBEE", "#CC3311", "#009988", "#EE3377", "#BBBBBB")
+bright_seven <- c("#4477AA", "#228833", "#AA3377", "#BBBBBB", "#66CCEE", "#CCBB44", "#EE6677")
+
+# World map data from tidyverse
+world <- map_data("world")
+```
+
+# WSPR Data
+
+## Load WPSR Data
+
+```{r}
+WSPRLive20221009 <- read_delim(
+  "WSPRLive20221009.tsv",
+  delim = "\t",
+  escape_double = FALSE,
+  col_types = cols(
+    time = col_datetime(format = "%Y-%m-%d %H:%M:%S"),
+    band = col_factor(
+      levels = c(
+        "-1",
+        "0",
+        "1",
+        "3",
+        "5",
+        "7",
+        "10",
+        "14",
+        "18",
+        "21",
+        "24",
+        "28",
+        "50",
+        "70",
+        "144",
+        "432",
+        "1296"
+      )
+    )
+  ),
+  trim_ws = TRUE
+)
+```
+
+## Filter WSPR Data
+
+```{r}
+# Add the number of occurrences in n based on band and time reported
+WSPRLive20221009 <- WSPRLive20221009 %>%
+  group_by(band, time) %>%
+  add_count() %>%
+  ungroup()
+
+# Remove reception reports recorded at odd numbered intervals 
+WSPRLive20221009 <- WSPRLive20221009 %>%
+  filter(n > 13)
+
+# Keep just the total number of observations for each band and time
+WSPR_Extract <- WSPRLive20221009 %>%
+  distinct(band, time, n)
+
+# Narrow the time frame down so it's easier to work with
+WSPR_Extract_TimeLimit <- WSPRLive20221009 %>%
+  distinct(band, time, n) %>%
+  filter(time > ymd_hms("2022-10-09 12:50:00")) %>%
+  filter(time < ymd_hms("2022-10-09 15:50:00"))
+
+# Keep only bands that have enough observations
+WSPR_Extract_TimeLimit_LessBands <- WSPR_Extract_TimeLimit %>%
+  filter(band == 3 | band == 7 | band == 10 | band == 14 | band == 18 | band == 21 | band == 28)
+
+```
+
+# Reception Reports
+
+## Graphs
+
+### Count of Reception Reports
+ 
+Graph of reception reports based on time and band. Black line is for when the GRB was first reported by the Swift Satlight. @2022GCN.32668....1F
+
+```{r}
+WSPR_Extract_TimeLimit_LessBands %>%
+  ggplot(aes(time, n, group = band, col = band)) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(
+    values = vibrant_seven,
+    name = "Frequency",
+    breaks = c("3", "7", "10", "14", "18", "21", "28"),
+    labels = c("3Mhz", "7Mhz", "10Mhz", "14Mhz", "18Mhz", "21Mhz", "28Mhz")
+  ) +
+  geom_vline(xintercept = ymd_hms("2022-10-09 13:16:59"),
+             linewidth = 0.5) +
+  annotate("text",
+           x = ymd_hms("2022-10-09 13:16:59"),
+           y = 2500,
+           angle = 90,
+           label = "\n2022-10-09 13:16:59 (UTC)") +
+  ggtitle("Number of WSPR Sots Reported by Band") +
+  xlab("Time Observation Recorded (UTC)") +
+  ylab("Number of Observations") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw()
+```
+
+Graph of log transformed reception reports based on time and band. Black line is for when the GRB occurred in Gotz et al 2022 https://gcn.gsfc.nasa.gov/other/221009A.gcn3
+
+```{r}
+# Graph of log transformed reception reports based on time and band
+# Black line is for when the GRB occurred in Gotz et al 2022
+# https://gcn.gsfc.nasa.gov/other/221009A.gcn3
+WSPR_Extract_TimeLimit_LessBands %>%
+  ggplot(aes(time, log(n), group = band, col = band)) +
+  geom_line(linewidth = 1) +
+  scale_colour_manual(
+    values = vibrant_seven,
+    name = "Frequency",
+    breaks = c("3", "7", "10", "14", "18", "21", "28"),
+    labels = c("3Mhz", "7Mhz", "10Mhz", "14Mhz", "18Mhz", "21Mhz", "28Mhz")
+  ) +
+  geom_vline(xintercept = ymd_hms("2022-10-09 13:16:59"),
+             linewidth = 0.5) +
+  annotate("text",
+           x = ymd_hms("2022-10-09 13:16:59"),
+           y = 7,
+           angle = 90,
+           label = "\n2022-10-09 13:16:59 (UTC)") +
+  ggtitle("Number of WSPR Sots Reported by Band") +
+  xlab("Time Observation Recorded (UTC)") +
+  ylab("log(Number of Observations)") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw()
+```
+
+### Summary Data
+
+```{r}
+summaryData <- WSPRLive20221009 %>%
+  group_by(band, time) %>%
+  summarise(
+    minDistance = min(distance),
+    maxDistance = max(distance),
+    medianDistance = median(distance),
+    meanDistance = mean(distance),
+    sdDistance = sd(distance),
+    minPower = min(power),
+    maxPower = max(power),
+    medianPower = median(power),
+    meanPower = mean(power),
+    sdPower = sd(power),
+    minSNR = min(snr),
+    maxSNR = max(snr),
+    medianSNR = median(snr),
+    meanSNR = mean(snr),
+    sdSNR = sd(snr),
+    n = n()
+  ) %>%
+  ungroup()
+
+# summaryData <- summaryData %>%
+#   filter(time > ymd_hms("2022-10-09 12:50:00")) %>%
+#   filter(time < ymd_hms("2022-10-09 15:50:00"))
+
+summaryData3 <- summaryData %>%
+  filter(band == 3)
+
+summaryData7 <- summaryData %>%
+  filter(band == 7)
+
+summaryData10 <- summaryData %>%
+  filter(band == 10)
+
+summaryData14 <- summaryData %>%
+  filter(band == 14)
+
+summaryData18 <- summaryData %>%
+  filter(band == 18)
+
+summaryData21 <- summaryData %>%
+  filter(band == 21)
+
+summaryData28 <- summaryData %>%
+  filter(band == 28)
+
+summaryDataGroup <- summaryData %>%
+  filter(band == 3 | band == 7 | band == 10 | band == 14)
+
+```
+### Graphs of Maximum SNR
+
+
+```{r message=FALSE, warning=FALSE}
+ggplot(summaryDataGroup, aes(time, maxSNR)) +
+  geom_line() +
+  geom_smooth(method = "loess", color = "black") +
+    scale_colour_manual(
+    values = vibrant_seven,
+    name = "Frequency",
+    breaks = "3",
+    labels = "3Mhz") +
+  geom_vline(xintercept = ymd_hms("2022-10-09 13:16:59"),
+             linewidth = 0.5)+
+  ggtitle("Maximum Reported SNR") +
+  xlab("Time Observation Recorded (UTC)") +
+  ylab("SNR") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  facet_grid(rows = vars(band)) +
+  theme_bw()
+```
+
+
+#### 80 Meters (3Mhz)
+
+```{r message=FALSE, warning=FALSE}
+ggplot(summaryData3, aes(time, maxSNR, group = band, col = band)) +
+  geom_line(linewidth = 1) +
+  geom_smooth(method = "loess", color = "black") +
+    scale_colour_manual(
+    values = vibrant_seven,
+    name = "Frequency",
+    breaks = "3",
+    labels = "3Mhz") +
+  geom_vline(xintercept = ymd_hms("2022-10-09 13:16:59"),
+             linewidth = 0.5)+
+  ggtitle("Maximum Reported SNR") +
+  xlab("Time Observation Recorded (UTC)") +
+  ylab("SNR") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw()
+```
+
+
+#### 40 Meters (7Mhz)
+
+```{r message=FALSE, warning=FALSE}
+ggplot(summaryData7, aes(time, maxSNR, group = band, col = band)) +
+  geom_line(linewidth = 1) +
+  geom_smooth(method = "loess", color = "black") +
+    scale_colour_manual(
+    values = vibrant_seven,
+    name = "Frequency",
+    breaks = "7",
+    labels = "7Mhz") +
+  geom_vline(xintercept = ymd_hms("2022-10-09 13:16:59"),
+             linewidth = 0.5)+
+  ggtitle("Maximum Reported SNR") +
+  xlab("Time Observation Recorded (UTC)") +
+  ylab("SNR") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw()
+```
+
+#### 20 Meters (14Mhz)
+
+```{r message=FALSE, warning=FALSE}
+ggplot(summaryData14, aes(time, maxSNR, group = band, col = band)) +
+  geom_line(linewidth = 1) +
+  geom_smooth(method = "loess", color = "black") +
+    scale_colour_manual(
+    values = vibrant_seven,
+    name = "Frequency",
+    breaks = "14",
+    labels = "14Mhz") +
+  geom_vline(xintercept = ymd_hms("2022-10-09 13:16:59"),
+             linewidth = 0.5)+
+  ggtitle("Maximum Reported SNR") +
+  xlab("Time Observation Recorded (UTC)") +
+  ylab("SNR") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw()
+```
+#### 15 Meters (21Mhz)
+
+```{r message=FALSE, warning=FALSE}
+ggplot(summaryData21, aes(time, maxSNR, group = band, col = band)) +
+  geom_line(linewidth = 1) +
+  geom_smooth(method = "loess", color = "black") +
+    scale_colour_manual(
+    values = vibrant_seven,
+    name = "Frequency",
+    breaks = "21",
+    labels = "21Mhz") +
+  geom_vline(xintercept = ymd_hms("2022-10-09 13:16:59"),
+             linewidth = 0.5)+
+  ggtitle("Maximum Reported SNR") +
+  xlab("Time Observation Recorded (UTC)") +
+  ylab("SNR") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw()
+```
+
+#### 10 Meters (28Mhz)
+
+```{r message=FALSE, warning=FALSE}
+ggplot(summaryData28, aes(time, maxSNR, group = band, col = band)) +
+  geom_line(linewidth = 1) +
+  geom_smooth(method = "loess", color = "black") +
+    scale_colour_manual(
+    values = vibrant_seven,
+    name = "Frequency",
+    breaks = "28",
+    labels = "28Mhz") +
+  geom_vline(xintercept = ymd_hms("2022-10-09 13:16:59"),
+             linewidth = 0.5)+
+  ggtitle("Maximum Reported SNR") +
+  xlab("Time Observation Recorded (UTC)") +
+  ylab("SNR") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw()
+```
+
+## Table
+
+
+```{r}
+datatable(WSPR_Extract_TimeLimit_LessBands, filter = 'top', colnames = c('Time', 'Band', 'Number of Observations'), rownames = FALSE)
+```
+
+
+
+# Reception Maps
+
+## 20 meters at 12:32 UTC
+
+```{r}
+# Reception Maps for 20 meters at 12:32 UTC
+MapData_20Meter_1232 <- WSPRLive20221009 %>%
+  filter(band == 14) %>%
+  filter(time > ymd_hms("2022-10-09 12:30:00")) %>%
+  filter(time < ymd_hms("2022-10-09 12:34:00")) %>%
+  select(rx_sign,rx_lat,rx_lon,tx_sign,tx_lat,tx_lon) %>%
+  mutate(link = row_number()) %>%
+  pivot_longer(
+    !link,
+    names_to = c("txrx", ".value"),
+    names_sep = "_"
+  )
+ggplot(MapData_20Meter_1232) +
+  geom_polygon(data=world, aes(x=long, y=lat, group=group)) +
+  geom_line(aes(x=lon, y=lat, group = link), color="#CC3311", linewidth=0.5) +
+  geom_point(data=MapData_20Meter_1232, aes(x=lon, y=lat, colour = txrx), alpha=0.7) +
+  scale_colour_manual(
+    values = vibrant_seven,
+    name = "Site Type",
+    breaks = c("rx", "tx"),
+    labels = c("Reception", "Transmission")
+  ) +
+  ggtitle("Tranmission and Reception Locations",
+          subtitle = "20 Meter Band at 13:32:00 UTC") +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw() +
+  coord_quickmap()
+
+```
+
+## 40 meters at 12:32 UTC
+
+```{r}
+# Reception Maps for 40 meters at 12:32 UTC
+MapData_40Meter_1232 <- WSPRLive20221009 %>%
+  filter(band == 7) %>%
+  filter(time > ymd_hms("2022-10-09 12:30:00")) %>%
+  filter(time < ymd_hms("2022-10-09 12:34:00")) %>%
+  select(rx_sign,rx_lat,rx_lon,tx_sign,tx_lat,tx_lon) %>%
+  mutate(link = row_number()) %>%
+  pivot_longer(
+    !link,
+    names_to = c("txrx", ".value"),
+    names_sep = "_"
+  )
+
+ggplot(MapData_40Meter_1232) +
+  geom_polygon(data=world, aes(x=long, y=lat, group=group)) +
+  geom_line(aes(x=lon, y=lat, group = link), color="#CC3311", linewidth=0.5) +
+  geom_point(data=MapData_40Meter_1232, aes(x=lon, y=lat, colour = txrx), alpha=0.7) +
+  scale_colour_manual(
+    values = vibrant_seven,
+    name = "Site Type",
+    breaks = c("rx", "tx"),
+    labels = c("Reception", "Transmission")
+  ) +
+  ggtitle("Tranmission and Reception Locations",
+          subtitle = "40 Meter Band at 12:32:00 UTC") +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw() +
+  coord_quickmap()
+```
+
+## 20 meters at 13:32 UTC
+
+```{r}
+# Reception Maps for 20 meters at 13:32 UTC
+MapData_20Meter_1332 <- WSPRLive20221009 %>%
+  filter(band == 14) %>%
+  filter(time > ymd_hms("2022-10-09 13:30:00")) %>%
+  filter(time < ymd_hms("2022-10-09 13:34:00")) %>%
+  select(rx_sign,rx_lat,rx_lon,tx_sign,tx_lat,tx_lon) %>%
+  mutate(link = row_number()) %>%
+  pivot_longer(
+    !link,
+    names_to = c("txrx", ".value"),
+    names_sep = "_"
+  )
+ggplot(MapData_20Meter_1332) +
+  geom_polygon(data=world, aes(x=long, y=lat, group=group)) +
+  geom_line(aes(x=lon, y=lat, group = link), color="#CC3311", linewidth=0.5) +
+  geom_point(data=MapData_20Meter_1332, aes(x=lon, y=lat, colour = txrx), alpha=0.7) +
+  scale_colour_manual(
+    values = vibrant_seven,
+    name = "Site Type",
+    breaks = c("rx", "tx"),
+    labels = c("Reception", "Transmission")
+  ) +
+  ggtitle("Tranmission and Reception Locations",
+          subtitle = "20 Meter Band at 13:32:00 UTC") +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw() +
+  coord_quickmap()
+
+```
+
+## 40 meters at 13:32 UTC
+
+```{r}
+# Reception Maps for 40 meters at 13:32 UTC
+MapData_40Meter_1332 <- WSPRLive20221009 %>%
+  filter(band == 7) %>%
+  filter(time > ymd_hms("2022-10-09 13:30:00")) %>%
+  filter(time < ymd_hms("2022-10-09 13:34:00")) %>%
+  select(rx_sign,rx_lat,rx_lon,tx_sign,tx_lat,tx_lon) %>%
+  mutate(link = row_number()) %>%
+  pivot_longer(
+    !link,
+    names_to = c("txrx", ".value"),
+    names_sep = "_"
+  )
+
+ggplot(MapData_40Meter_1332) +
+  geom_polygon(data=world, aes(x=long, y=lat, group=group)) +
+  geom_line(aes(x=lon, y=lat, group = link), color="#CC3311", linewidth=0.5) +
+  geom_point(data=MapData_40Meter_1332, aes(x=lon, y=lat, colour = txrx), alpha=0.7) +
+  scale_colour_manual(
+    values = vibrant_seven,
+    name = "Site Type",
+    breaks = c("rx", "tx"),
+    labels = c("Reception", "Transmission")
+  ) +
+  ggtitle("Tranmission and Reception Locations",
+          subtitle = "40 Meter Band at 13:32:00 UTC") +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  labs(caption = "(Data provided by WSPRLive)") +
+  theme_bw() +
+  coord_quickmap()
+```
+
+# References 
